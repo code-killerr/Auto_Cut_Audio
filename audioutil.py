@@ -36,8 +36,8 @@ startFlag 用来标记是否开始阶段，saveCount 标记存储序号
 优化:
     按照静音时间，如果cut+mute*2>静音时间>mute*2 切为S->E+静音时间/2，更新位置M
     更新后必须设置留白时间，否则切割会出现问题
-    
-    
+
+
 待优化:由于切割位置有可能为奇数位置导致双声道的音频左右声道互换，需要进行补足处理，防止双声道互换，激活方式应获取音频声道数，增加获取声道数方法，目前单声道无bug
 '''
 import math
@@ -48,7 +48,7 @@ import numpy
 from collections import namedtuple
 import struct
 
-
+WavSubChunk = namedtuple('WavSubChunk', ['id', 'position', 'size'])
 
 
 class handleAudio:
@@ -83,7 +83,8 @@ class handleAudio:
 
     def setSaveFolder(self, path):
         self.saveFolder = path
-    #设置噪声分贝，无参数贼采用自动分贝
+
+    # 设置噪声分贝，无参数贼采用自动分贝
     def setNoiseDB(self, limitDB):
         if limitDB is None:
             self.noiseDB = self.__getAutoSplitValue__()
@@ -101,16 +102,18 @@ class handleAudio:
 
     def setChangeSecond(self, second):
         self.ChangeSecond = second
-    #如果未设置分贝将获取自动底噪分贝
-    
+
+    # 如果未设置分贝将获取自动底噪分贝
+
     def getNoiseDB(self, useAmplitude=False):
         value = self.__getClearValue__(useAmplitude=useAmplitude)
 
         return self.__valueToDB__(value)
         # return self.noiseDB
+
     def getFmt(self):
         return self.fmt
-    
+
     def getHz(self):
         return self.hz
 
@@ -118,7 +121,7 @@ class handleAudio:
         return self.channel
 
     # 获取前后静音段时间，如无分贝数自动按照振幅选取合适的底噪分贝，如有分贝数按照分贝数判断，如果背景有其它说话声音不要使用自动底噪判别
-    def getFrontAndEndEmptySec(self, limitDB=None, useAmplitude = False):
+    def getFrontAndEndEmptySec(self, limitDB=None, useAmplitude=False):
         buf = self.__getAudioBuf__()
         hz = self.hz
         bufLength = self.dataLength
@@ -137,14 +140,14 @@ class handleAudio:
                 endEmptySec = (bufLength - count) / hz
                 break
         return headerEmptySec, endEmptySec
-    
+
     # 手动切割音频方法
     def splitAudio(self, saveFile, start, end):
         self.__splitDataAndSaveAudio__(saveFile, int(start * self.hz * self.channel), int(end * self.hz * self.channel))
 
     # 自动切割音频方法
     def autoSplitAudio(self, save=None, value=None, saveSplitAudio=True, saveSlient=True, useAmplitude=False):
-        if value is None:
+        if not value:
             value = self.__getClearValue__(useAmplitude)
         if saveSplitAudio:
             if not save:
@@ -156,38 +159,29 @@ class handleAudio:
         splitTimeData = []
         buf = self.__getAudioBuf__()
         n = self.dataLength
-        hz = self.hz
         if n != len(buf):
             print("当前数据长度与header信息不符!!!!")
             print(n)
             print(len(buf))
             print(self.audioPath)
-        clearSecond1 = int(hz * self.emptySecond * self.channel)
-        clearSecond2 = int(hz * self.emptySecond2 * self.channel)
-        cutSecond = int(hz * self.minSilentTime * self.channel)
-        changeTime = hz * self.ChangeSecond * self.channel
-        startFlag = True
-        end = 0
-        start = 0
-        saveCount = 0
+        clearSecond1 = int(self.hz * self.emptySecond * self.channel)
+        clearSecond2 = int(self.hz * self.emptySecond2 * self.channel)
+        cutSecond = int(self.hz * self.minSilentTime * self.channel)
+        changeTime = self.hz * self.ChangeSecond * self.channel
+        startFlag, end, start, saveCount = True, 0, 0, 0
+
         # 切割分为三种状态,S,M,E
         for i in range(0, len(buf)):
             if startFlag:
                 # 进入Start
-                if abs(buf[i]) < value:
-                    pass
-                else:
+                if abs(buf[i]) >= value:
                     # 开始录入切割部分并记录开始位置
                     if i - end > clearSecond1 + cutSecond:
                         end = i - clearSecond1
                         if saveSplitAudio and saveSlient:
-                            if self.channel == 2:
-                                end += 1 if end % 2 != 0 else 0
-                            savePath = os.path.join(save,
-                                                    f'{self.wavName}-{str(saveCount)}-{str(start / hz / self.channel)}-{str(end / hz / self.channel)}.wav')
-                            self.__splitDataAndSaveAudio__(savePath, start, end)
+                            self.__saveWithChannels__(start, end, saveCount, save)
                         if saveSlient:
-                            splitTimeData.append([start / hz, end / hz])
+                            splitTimeData.append([start / self.hz, end / self.hz])
                         start = end
                         saveCount += 1
                     end = i
@@ -206,34 +200,22 @@ class handleAudio:
                         if i - end > clearSecond * 2 + cutSecond:
                             end = end + clearSecond
                             if saveSplitAudio:
-                                if self.channel == 2:
-                                    end += 1 if end % 2 != 0 else 0
-                                savePath = os.path.join(save,
-                                                        f'{self.wavName}-{str(saveCount)}-{str(start / hz / self.channel)}-{str(end / hz / self.channel)}.wav')
-                                self.__splitDataAndSaveAudio__(savePath, start, end)
-                            splitTimeData.append([start / hz, end / hz])
+                                self.__saveWithChannels__(start, end, saveCount, save)
+                            splitTimeData.append([start / self.hz, end / self.hz])
                             saveCount += 1
                             start = end
                             end = i - clearSecond
                             if saveSlient:
                                 if saveSplitAudio:
-                                    if self.channel == 2:
-                                        end += 1 if end % 2 != 0 else 0
-                                    savePath = os.path.join(save,
-                                                            f'{self.wavName}-{str(saveCount)}-{str(start / hz / self.channel)}-{str(end / hz / self.channel)}.wav')
-                                    self.__splitDataAndSaveAudio__(savePath, start, end)
-                                splitTimeData.append([start / hz, end / hz])
+                                    self.__saveWithChannels__(start, end, saveCount, save)
+                                splitTimeData.append([start / self.hz, end / self.hz])
                                 saveCount += 1
                             start = end
                         else:
                             end = int(end + (i - end) / 2)
                             if saveSplitAudio:
-                                if self.channel == 2:
-                                    end += 1 if end % 2 != 0 else 0
-                                savePath = os.path.join(save,
-                                                        f'{self.wavName}-{str(saveCount)}-{str(start / hz / self.channel)}-{str(end / hz / self.channel)}.wav')
-                                self.__splitDataAndSaveAudio__(savePath, start, end)
-                            splitTimeData.append([start / hz, end / hz])
+                                self.__saveWithChannels__(start, end, saveCount, save)
+                            splitTimeData.append([start / self.hz, end / self.hz])
                             saveCount += 1
                             start = end
                     end = i
@@ -244,33 +226,21 @@ class handleAudio:
         if n - end > clearSecond + cutSecond:
             end = end + clearSecond
             if saveSplitAudio:
-                if self.channel == 2:
-                    end += 1 if end % 2 != 0 else 0
-                savePath = os.path.join(save,
-                                        f'{self.wavName}-{str(saveCount)}-{str(start / hz / self.channel)}-{str(end / hz / self.channel)}.wav')
-                self.__splitDataAndSaveAudio__(savePath, start, end)
-            splitTimeData.append([start / hz, end / hz])
+                self.__saveWithChannels__(start, end, saveCount, save)
+            splitTimeData.append([start / self.hz, end / self.hz])
             saveCount += 1
             start = end
             end = n
             if saveSlient:
                 if saveSplitAudio:
-                    if self.channel == 2:
-                        end += 1 if end % 2 != 0 else 0
-                    savePath = os.path.join(save,
-                                            f'{self.wavName}-{str(saveCount)}-{str(start / hz / self.channel)}-{str(end / hz / self.channel)}.wav')
-                    self.__splitDataAndSaveAudio__(savePath, start, end)
-                splitTimeData.append([start / hz, end / hz])
+                    self.__saveWithChannels__(start, end, saveCount, save)
+                splitTimeData.append([start / self.hz, end / self.hz])
                 saveCount += 1
         else:
             end = n
             if saveSplitAudio:
-                if self.channel == 2:
-                    end += 1 if end % 2 != 0 else 0
-                savePath = os.path.join(save,
-                                        f'{self.wavName}-{str(saveCount)}-{str(start / hz / self.channel)}-{str(end / hz / self.channel)}.wav')
-                self.__splitDataAndSaveAudio__(savePath, start, end)
-            splitTimeData.append([start / hz, end / hz])
+                self.__saveWithChannels__(start, end, saveCount, save)
+            splitTimeData.append([start / self.hz, end / self.hz])
             saveCount += 1
         return splitTimeData
 
@@ -297,6 +267,13 @@ class handleAudio:
         pos = dataInfo.position + 4
         length = struct.unpack_from('<I', self.headerBinary[pos:pos + 4])[0]
         return int(length / 2)  # 音频数量两个字节为一个数值
+
+    def __saveWithChannels__(self, start, end, saveCount, save):
+        if self.channel == 2:
+            end += 1 if end % 2 != 0 else 0
+        savePath = os.path.join(save,
+                                f'{self.wavName}-{str(saveCount)}-{str(start / self.hz / self.channel)}-{str(end / self.hz / self.channel)}.wav')
+        self.__splitDataAndSaveAudio__(savePath, start, end)
 
     # 获取音频format数值
     def __decodeFmt__(self, data):
@@ -426,9 +403,9 @@ class handleAudio:
         # 转出来的自动值一般偏低，增加5分贝
         return self.__valueToDB__(noiseValue)
 
-    #将数字转为长度为len的hash表内数据，方便插入
-    #先除以len作为前置，再余len作为后置
-    #返回hash表中位置以及存储的值
+    # 将数字转为长度为len的hash表内数据，方便插入
+    # 先除以len作为前置，再余len作为后置
+    # 返回hash表中位置以及存储的值
     # def __decodeAudioValue__(self, length, value):
     #     value = str(value)
     #     offset = len(str(length))
@@ -459,13 +436,11 @@ class handleAudio:
             else:
                 left = mid + 1
             mid = int((right + left) / 2)
-        valueList = numpy.insert(valueList, mid+1, value)
+        valueList = numpy.insert(valueList, mid + 1, value)
         # valueList.insert(mid + 1, value)
         valueList = numpy.delete(valueList, -1)
         # del valueList[-1]
         return valueList
-
-
 
     def __getAutoSplitValue__(self):
         # 根据最小分贝来判断噪声分贝
@@ -478,7 +453,7 @@ class handleAudio:
         else:
             print("音频时长过小，设置底噪值为默认")
             return self.__DBToValue__(50)
-        if bufLength < getTime*6:
+        if bufLength < getTime * 6:
             print("音频时长过小，设置底噪值为默认")
             return self.__DBToValue__(50)
         audioSample = numpy.array([])
@@ -493,14 +468,14 @@ class handleAudio:
             print(self.audioPath)
             bufLength = len(buf)
         # 防止数据被前后静音段影响,去除前后3个取值时间
-        for i in range(int(getTime*3), int(bufLength-3*getTime), int(jumpTime)):
+        for i in range(int(getTime * 3), int(bufLength - 3 * getTime), int(jumpTime)):
             sampleValue = abs(buf[i])
             if countTime > getTime:
                 audioSample = numpy.append(audioSample, timeSample)
                 countTime = 0
                 count = 0
             if count != 0:
-                timeSample = timeSample + (sampleValue - timeSample)/count
+                timeSample = timeSample + (sampleValue - timeSample) / count
             else:
                 timeSample = sampleValue
             countTime += jumpTime
@@ -570,7 +545,6 @@ class handleAudio:
     # 获取所有文件节点信息
     def __extract_wav_headers__(self, data):
         # def search_subchunk(data, subchunk_id):
-        WavSubChunk = namedtuple('WavSubChunk', ['id', 'position', 'size'])
         pos = 12  # The size of the RIFF chunk descriptor
         subchunks = []
         while pos + 8 <= len(data) and len(subchunks) < 10:
@@ -612,7 +586,6 @@ def getAudioFrontAndEndEmptySec(audioPath, voiceDB=None):
     start, end = audio.getFrontAndEndEmptySec(voiceDB)
     return start, end
 
-
 # if __name__ == '__main__':
 # read_data(r'D:\workerFolder\work\project\solve_wav\00001-00400\00001.wav', r'D:\workerFolder\work\project\solve_wav\00001.wav')
 # if __name__ == '__main__':
@@ -638,8 +611,10 @@ def getAudioFrontAndEndEmptySec(audioPath, voiceDB=None):
 #         print(autoValue)
 #         print(audio.getNoiseDB())
 #         audio.autoSplitAudio()
-    # audio.autoSplitAudio(r'D:\workerFolder\work\project\solve_wav\autocut\test')
-# audio.autoSplitAudio(r'D:\workerFolder\work\project\solve_wav\OneDrive_1_2020-5-11\result')
+# audio.autoSplitAudio(r'D:\workerFolder\work\project\solve_wav\autocut\test')
+# audio = handleAudio(r'/Users/xtu/workerFolder/work/project/字节跳动-音频切割/1.wav')
+# print(audio)
+# audio.autoSplitAudio(r'/Users/xtu/workerFolder/work/project/字节跳动-音频切割/out/1')
 # print(audio.__getAutoSplitValue__())
 # audio.setEmptySecond(0.3)
 # audio.setEmptySecond2(0.2)
