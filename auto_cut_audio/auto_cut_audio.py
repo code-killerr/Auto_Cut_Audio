@@ -1,6 +1,6 @@
 from .HandleAudio import HandleAudio
 import os
-import more_itertools
+
 '''
 # 待办 
     去除音频静音段底噪
@@ -32,21 +32,22 @@ def cut_audio(audio_path, save_path, cut_time_list):
         audio.splitAudio(save, cut_time[0], cut_time[1])
 
 
-
 # 获取音频前后静音段时长
 def get_audio_front_and_end_empty_second(audio_path, voice_db=None):
     audio = HandleAudio(audio_path)
     start, end = audio.getFrontAndEndEmptySec(voice_db)
     return start, end
 
-# 删除前后静音段
-def get_audio_front_and_end_empty_second(audio_path, voice_db=None):
+
+# 获取前后静音段并删除前后静音段
+def delete_audio_front_and_end_empty_second(audio_path, voice_db=None):
     audio = HandleAudio(audio_path)
     start, end = audio.getFrontAndEndEmptySec(voice_db)
     savePath = create_cut_time(audio_path, 0, start, end)
     savePath = os.path.join(os.path.dirname(audio_path), savePath)
     audio.splitAudio(savePath, start, end)
     return start, end
+
 
 # 获取音频信息
 def get_audio_info(audio_path):

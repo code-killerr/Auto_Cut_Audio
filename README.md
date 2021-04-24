@@ -64,23 +64,56 @@ import auto_cut_audio
 cut_time = [[0,12],[12,23],[23,30]]
 auto_cut_audio.cut_audio('audio path', 'save folder', cut_time)
 ```
-### 3. get audio info🤓
+### 3. make cut audio in a specific time ranged👍
+you don't want your audio too long or too short,we can fix it
+```python
+import auto_cut_audio
+auto_cut_audio.auto_cut_audio_with_time(audio_path='audio path', limit_time='audio duration time')
+```
+
+### 4. get audio info🤓
 
 if you don't want to cut audio you just want to get some information with your audio file,you can do it
 
 ```python
 import auto_cut_audio
-auto_cut_audio.get_audio_info('audio path')
+cut_time = auto_cut_audio.get_audio_info('audio path')
+# auto_cut_audio.get_audio_info('audio path', saveFolder='save folder') # when you want save the audio
+print(cut_time)
 ```
 
-### 4. get slience time in audio start and end👌
+### 5. get silence time in audio start and end👌
 
 if you want to know how many seconds have no voice in your audio file start and end,you can do it.
 
 ```python
 import auto_cut_audio
-auto_cut_audio.get_audio_front_and_end_empty_second('audio path')
+start,end = auto_cut_audio.get_audio_front_and_end_empty_second('audio path')
+print(start,end)
 ```
 
-and you can also delete them with cut audio
+and you can also delete them
+```python
+import auto_cut_audio
+start,end = auto_cut_audio.delete_audio_front_and_end_empty_second('audio path')
+print(start, end)
+```
 
+### 6. handle silence time😱
+too many blank audio file?
+
+don't worry you can delete them,
+
+```python
+import auto_cut_audio
+cut_time = auto_cut_audio.auto_cut_audio_delete_empty_audio('audio path')
+# auto_cut_audio.auto_cut_audio_delete_empty_audio('audio path', saveFolder='save folder') # when you want save the audio
+print(cut_time)
+```
+or merge them in your audio.
+```python
+import auto_cut_audio
+cut_time = auto_cut_audio.auto_cut_audio_without_empty_audio('audio path')
+# auto_cut_audio.auto_cut_audio_delete_empty_audio('audio path', saveFolder='save folder') # when you want save the audio
+print(cut_time)
+```
