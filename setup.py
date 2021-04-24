@@ -12,7 +12,7 @@ from setuptools import setup, find_packages
 from auto_cut_audio.__version__ import __version__
 
 setup(
-    name="AutoCutAudio",
+    name="auto_cut_audio",
     version=__version__,
     keywords=("pip3", "henry"),
     description="tools for auto cut wav audio",
