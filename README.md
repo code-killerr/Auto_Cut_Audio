@@ -110,10 +110,14 @@ cut_time = auto_cut_audio.auto_cut_audio_delete_empty_audio('audio path')
 # auto_cut_audio.auto_cut_audio_delete_empty_audio('audio path', saveFolder='save folder') # when you want save the audio
 print(cut_time)
 ```
-or merge them in your audio.
+or merge them in your cut audio.
 ```python
 import auto_cut_audio
 cut_time = auto_cut_audio.auto_cut_audio_without_empty_audio('audio path')
 # auto_cut_audio.auto_cut_audio_delete_empty_audio('audio path', saveFolder='save folder') # when you want save the audio
 print(cut_time)
 ```
+
+now, you can enjoy it.
+
+代码核心为音频底噪的判断，代码中有两种判断方式，根据振幅判断以及根据音量大小进行判断，由于太菜没有使用傅里叶进行判断😭，等啥时候学会傅里叶了就可以更新了🙃。
