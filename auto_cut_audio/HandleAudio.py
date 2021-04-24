@@ -8,14 +8,15 @@ Short Description:
 Change History:
 end用来记录静音段开始位置，start用来记录切割段开始位置，i用来记录当前指向位置
 startFlag 用来标记是否开始阶段，saveCount 标记存储序号
-优化:
+更新:
     按照静音时间，如果cut+mute*2>静音时间>mute*2 切为S->E+静音时间/2，更新位置M
-    更新后必须设置留白时间，否则切割会出现问题
+    可设定是否输出切割文件
+    可设定底噪定位算法
+
 '''
 import math
 import array
 import os
-import sys
 import numpy
 from collections import namedtuple
 import struct
@@ -23,20 +24,31 @@ import struct
 WavSubChunk = namedtuple('WavSubChunk', ['id', 'position', 'size'])
 
 
-class handleAudio:
-    # audioPath 音频文件路径
-    # saveFolder 切割文件存储路径
-    # emptySecond 音频静音时长超过emptySecond*2后切割音频/音频前后最少留白，设定为99999,可进行对切割出的音频时长通过changeSecond设定
-    # emptySecond2 超过设定时长后,音频静音时长超过emptySecond2*2后切割音频/超过设定时长后音频前后最少留白
-    # changeSecond 设定emptySecond参数变更时长设定,设定为99999,取消动态切割
-    # limitDB 设定静音段分贝,如果为None将自动匹配底噪分贝(需背景音仅为底噪)
-    # minSilentTime 切割出空白音频最小时间，设定时长为99999将不切分空白音频
-    # 时长单位均为s,音量单位均为DB
+class HandleAudio:
 
     def __init__(self, audioPath, saveFolder=None, limitDB=None, emptySecond=0.5, emptySecond2=0.3, minSilentTime=1.0,
                  changeSecond=25):
+        """
+                @param audioPath: String
+                音频文件路径
+                @param saveFolder: String
+                切割文件存储路径
+                @param emptySecond: float
+                音频静音时长超过emptySecond*2后切割音频/音频前后最少留白，设定为99999,可进行对切割出的音频时长通过changeSecond设定
+                @param emptySecond2: float
+                超过设定时长后,音频静音时长超过emptySecond2*2后切割音频/超过设定时长后音频前后最少留白
+                @param changeSecond: float
+                设定静音段分贝,如果为None将自动匹配底噪分贝(需背景音仅为底噪)
+                @param limitDB: float
+                设定静音段分贝,如果为None将自动匹配底噪分贝(需背景音仅为底噪)
+                @param minSilentTime: float
+                切割出空白音频最小时间，设定时长为99999将不切分空白音频
+
+                时长单位均为s,音量单位均为DB
+                @return: none
+            """
         self.audioPath = audioPath
-        self.audioHeader, self.audioData, self.headerBinary = self.__getHeaderAndData__(audioPath)
+        self.audioHeader, self.audioData, self.headerBinary = self.__get_header_and_data__(audioPath)
         self.fmt = self.__decodeFmt__(self.headerBinary)
         self.hz = self.fmt["hz"]
         self.channel = self.fmt["channel"]
@@ -76,7 +88,7 @@ class handleAudio:
         self.ChangeSecond = second
 
     # 如果未设置分贝将获取自动底噪分贝
-
+    # 获取到的值统一为振幅高度
     def getNoiseDB(self, useAmplitude=False):
         value = self.__getClearValue__(useAmplitude=useAmplitude)
 
@@ -96,7 +108,7 @@ class handleAudio:
         buf = self.__getAudioBuf__()
         hz = self.hz
         bufLength = self.dataLength
-        if limitDB == None:
+        if limitDB is None:
             voiceValue = self.__getClearValue__(useAmplitude)
         else:
             voiceValue = limitDB
@@ -117,19 +129,33 @@ class handleAudio:
         self.__splitDataAndSaveAudio__(saveFile, int(start * self.hz * self.channel), int(end * self.hz * self.channel))
 
     # 自动切割音频方法
-    def autoSplitAudio(self, save=None, value=None, saveSplitAudio=True, saveSlient=True, useAmplitude=False):
-        if not value:
-            value = self.__getClearValue__(useAmplitude)
-        if saveSplitAudio:
-            if not save:
-                if not self.saveFolder:
-                    raise Exception("请设定切割文件存储路径")
-                save = self.saveFolder
-            if not os.path.isdir(save):
-                raise Exception("文件切割路径错误: " + save)
+    def autoSplitAudio(self, save=None, value=None, saveSlient=True, useAmplitude=False):
+        """
+            @param save: String
+            切割文件存储路径
+            @param value: int
+            底噪手动设定数值
+            @param saveSlient: boolean
+            设定是否存储静音段
+            @return: list
+            音频切割时间点信息
+        """
+        saveSplitAudio = True
         splitTimeData = []
         buf = self.__getAudioBuf__()
         n = self.dataLength
+
+        if not value:
+            value = self.__getClearValue__(useAmplitude)
+
+        # 检测是否存在保存路径，无保存路径不保存切割后数据
+        if not save:
+            if not self.saveFolder:
+                saveSplitAudio = False
+            save = self.saveFolder
+        if not os.path.isdir(save):
+            raise Exception("文件切割路径错误: " + save)
+
         if n != len(buf):
             print("当前数据长度与header信息不符!!!!")
             print(n)
@@ -323,6 +349,7 @@ class handleAudio:
         # del valueList[-1]
         return valueList
 
+    # 根据最小平均声音获取底噪 返回value(非分贝)
     def __getAutoSplitValue__(self):
         # 根据最小分贝来判断噪声分贝
         buf = self.__getAudioBuf__()
@@ -377,8 +404,14 @@ class handleAudio:
                 self.noiseDB = self.__getAutoSplitDBByAmplitude__()
             else:
                 self.noiseDB = self.__getAutoSplitValue__()
+                # 根据声音判定会偏小，通常加15分贝微调
+                self.__addDbInValue__(self.noiseDB, 15)
 
         return self.noiseDB
+
+    # 在value的基础上增加相应分贝
+    def __addDbInValue__(self, value, db):
+        return self.__DBToValue__(self.__valueToDB__(value) + db)
 
     # value转换为分贝
     @staticmethod
@@ -388,25 +421,12 @@ class handleAudio:
     # 分贝转换
     @staticmethod
     def __DBToValue__(DB):
-        if DB != None:
+        if DB is not None:
             return 10 ** (DB / 20)
         else:
             return None
 
-    def __getHeaderAndData__(self, filePath):
-        data = open(filePath, 'rb')
-        dataBinary = data.read()
-        chunks = self.__extract_wav_headers__(dataBinary)
-        dataBuf = chunks[-1]
-        if dataBuf.id != b'data':
-            raise Exception("Couldn't find data in wav!!")
-
-        pos = dataBuf.position + 8  # 去掉size段
-        headerBinary = dataBinary[:pos]
-        data.close()
-        return chunks, dataBinary[pos:(pos + dataBuf.size)], headerBinary
-
-    # 获取所有文件节点信息
+    # 获取头节点二进制数据
     def __extract_wav_headers__(self, data):
         pos = 12  # The size of the RIFF chunk descriptor
         subchunks = []
@@ -421,7 +441,16 @@ class handleAudio:
 
         return subchunks
 
-def getAudioFrontAndEndEmptySec(audioPath, voiceDB=None):
-    audio = handleAudio(audioPath)
-    start, end = audio.getFrontAndEndEmptySec(voiceDB)
-    return start, end
+    # 获取所有文件节点信息
+    def __get_header_and_data__(self, filePath):
+        data = open(filePath, 'rb')
+        dataBinary = data.read()
+        chunks = self.__extract_wav_headers__(dataBinary)
+        dataBuf = chunks[-1]
+        if dataBuf.id != b'data':
+            raise Exception("Couldn't find data in wav!!")
+
+        pos = dataBuf.position + 8  # 去掉size段
+        headerBinary = dataBinary[:pos]
+        data.close()
+        return chunks, dataBinary[pos:(pos + dataBuf.size)], headerBinary
