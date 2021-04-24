@@ -1,5 +1,5 @@
 # Auto_Cut_Audio(wav for now)
-We always have a lot of wav audio to cut.
+We always have a lot of wav audio to cut especially talking audio.
 
 sometimes we need to cut them but we always cut off a word or a complete sentence in audio.
 

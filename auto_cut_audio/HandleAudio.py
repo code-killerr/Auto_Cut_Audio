@@ -149,12 +149,15 @@ class HandleAudio:
             value = self.__getClearValue__(useAmplitude)
 
         # 检测是否存在保存路径，无保存路径不保存切割后数据
-        if not save:
-            if not self.saveFolder:
+        if save is None:
+            if self.saveFolder is None:
                 saveSplitAudio = False
-            save = self.saveFolder
-        if not os.path.isdir(save):
-            raise Exception("文件切割路径错误: " + save)
+            else:
+                save = self.saveFolder
+        # 判断路径有效
+        if saveSplitAudio:
+            if not os.path.isdir(save):
+                raise Exception("文件切割路径错误: " + save)
 
         if n != len(buf):
             print("当前数据长度与header信息不符!!!!")
