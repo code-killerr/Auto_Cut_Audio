@@ -21,13 +21,17 @@ import numpy
 from collections import namedtuple
 import struct
 
+from .Builder import Builder
+
 WavSubChunk = namedtuple('WavSubChunk', ['id', 'position', 'size'])
 
 
 class HandleAudio:
 
-    def __init__(self, audioPath, saveFolder=None, limitDB=None, emptySecond=0.5, emptySecond2=0.3, minSilentTime=1.0,
-                 changeSecond=25):
+    def __init__(self, audioPath: str, saveFolder: str = None, limitDB: float = None, emptySecond: float = 0.5,
+                 emptySecond2: float = 0.3,
+                 minSilentTime: float = 1.0,
+                 changeSecond: float = 25):
         """
                 @param audioPath: String
                 音频文件路径
@@ -47,6 +51,17 @@ class HandleAudio:
                 时长单位均为s,音量单位均为DB
                 @return: none
             """
+        self.init(audioPath, saveFolder, limitDB, emptySecond, emptySecond2, minSilentTime, changeSecond)
+
+    def init_with_builder(self, builder: Builder):
+        self.init(self.audioPath, builder.saveFolder, builder.limitDB, builder.emptySecond, builder.emptySecond2,
+                  builder.minSilentTime,
+                  builder.changeSecond)
+
+    def init(self, audioPath: str, saveFolder: str, limitDB: float, emptySecond: float,
+             emptySecond2: float,
+             minSilentTime: float,
+             changeSecond: float):
         self.audioPath = audioPath
         self.audioHeader, self.audioData, self.headerBinary = self.__get_header_and_data__(audioPath)
         self.fmt = self.__decodeFmt__(self.headerBinary)
@@ -173,7 +188,7 @@ class HandleAudio:
         changeTime = self.hz * self.ChangeSecond * self.channel
         startFlag, end, start, saveCount = True, 0, 0, 0
 
-        def get_buffer_value(count:int):
+        def get_buffer_value(count: int):
             return buf[count] if self.channel == 1 else self.getChannelsValue(buf[count])
 
         # 切割分为三种状态,S,M,E

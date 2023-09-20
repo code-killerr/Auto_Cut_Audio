@@ -1,4 +1,5 @@
-from HandleAudio import HandleAudio
+from .Builder import Builder
+from .HandleAudio import HandleAudio
 import os
 
 '''
@@ -11,14 +12,17 @@ import os
 # 快捷操作函数
 
 # 自动切割音频
-def auto_cut_audio(audio_path, **kwargs):
-    audio = HandleAudio(audio_path, **kwargs)
+def auto_cut_audio(audio_path, builder: Builder = None):
+    audio = HandleAudio(audio_path)
+    if builder is not None:
+        audio.init_with_builder(builder)
     return audio.autoSplitAudio()
 
 
 # 根据音频时间段手动切割音频
 def cut_audio(audio_path, save_path, cut_time_list):
     """
+    :
     :param audio_path: Str 音频路径
     :param save_path: str 音频存储路径
     :param cut_time_list: list 音频切割时长列表
@@ -55,27 +59,32 @@ def get_audio_info(audio_path):
 
 
 # 限定时长自动切割音频
-def auto_cut_audio_with_time(audio_path, limit_time, **kwargs):
-    audio = HandleAudio(audio_path, emptySecond=99999, changeSecond=limit_time, **kwargs)
+def auto_cut_audio_with_time(audio_path, limit_time, builder: Builder = None):
+    audio = HandleAudio(audio_path, emptySecond=99999, changeSecond=limit_time)
+    if builder is not None:
+        builder.emptySecond = 99999
+        builder.changeSecond = limit_time
+        audio.init_with_builder(builder)
     return audio.autoSplitAudio()
 
 
 # 自动切割音频并去除其中静音段
-def auto_cut_audio_delete_empty_audio(audio_path, **kwargs):
-    audio = HandleAudio(audio_path, **kwargs)
+def auto_cut_audio_delete_empty_audio(audio_path, builder: Builder = None):
+    audio = HandleAudio(audio_path)
+    if builder is not None:
+        audio.init_with_builder(builder)
     return audio.autoSplitAudio(saveSlient=False)
 
 
 # 自动切割音频不单独切出静音段
-def auto_cut_audio_without_empty_audio(audio_path, **kwargs):
-    audio = HandleAudio(audio_path, minSilentTime=99999, **kwargs)
+def auto_cut_audio_without_empty_audio(audio_path, builder: Builder = None):
+    audio = HandleAudio(audio_path, minSilentTime=99999)
+    if builder is not None:
+        builder.minSilentTime = 99999
+        audio.init_with_builder(builder)
     return audio.autoSplitAudio()
 
 
 # 生成音频名称
 def create_cut_time(audio_path, count, start, end):
     return f'{os.path.basename(audio_path)}_{count}_{str(start)}_{str(end)}'
-
-if __name__ == '__main__':
-    data = auto_cut_audio_without_empty_audio("/Users/admin/Downloads/5_01.wav")
-    print(data)
