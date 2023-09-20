@@ -52,6 +52,9 @@ class HandleAudio:
         self.fmt = self.__decodeFmt__(self.headerBinary)
         self.hz = self.fmt["hz"]
         self.channel = self.fmt["channel"]
+        self.format = self.fmt["audioFormat"]
+        self.block_align = self.fmt["blockAlign"]
+        self.bit_depth = self.fmt["bitsPerSample"]
         self.wavName = os.path.split(audioPath)[1].split('.wav')[0]
         self.dataLength = self.__len__()
         self.saveFolder = saveFolder
@@ -170,11 +173,14 @@ class HandleAudio:
         changeTime = self.hz * self.ChangeSecond * self.channel
         startFlag, end, start, saveCount = True, 0, 0, 0
 
+        def get_buffer_value(count:int):
+            return buf[count] if self.channel == 1 else self.getChannelsValue(buf[count])
+
         # 切割分为三种状态,S,M,E
         for i in range(0, len(buf)):
             if startFlag:
                 # 进入Start
-                if abs(buf[i]) >= value:
+                if abs(get_buffer_value(i)) >= value:
                     # 开始录入切割部分并记录开始位置
                     if i - end > clearSecond1 + cutSecond:
                         end = i - clearSecond1
@@ -189,7 +195,7 @@ class HandleAudio:
                     startFlag = False
             else:
                 # 进入Med
-                if abs(buf[i]) > value:
+                if abs(get_buffer_value(i)) > value:
                     # 动态调整
                     if end - start < changeTime:
                         clearSecond = clearSecond1
@@ -244,6 +250,12 @@ class HandleAudio:
             saveCount += 1
         return splitTimeData
 
+    def getChannelsValue(self, data: numpy.ndarray):
+        result = 0
+        for i in data:
+            result += i
+        return result / len(data)
+
     # 获取数据长度
     def __len__(self):
         dataInfo = [x for x in self.audioHeader if x.id == b'data']
@@ -252,7 +264,7 @@ class HandleAudio:
         dataInfo = dataInfo[0]
         pos = dataInfo.position + 4
         length = struct.unpack_from('<I', self.headerBinary[pos:pos + 4])[0]
-        return int(length / 2)  # 音频数量两个字节为一个数值
+        return int(length / self.block_align)  # 音频数量两个字节为一个数值
 
     def __saveWithChannels__(self, start, end, saveCount, save):
         if self.channel == 2:
@@ -269,7 +281,7 @@ class HandleAudio:
         fmt = fmt[0]
         pos = fmt.position + 8  # 跳过fmt大小指示
         audio_format = struct.unpack_from('<H', data[pos:pos + 2])[0]
-        if audio_format != 1 and audio_format != 0xFFFE:
+        if audio_format != 1 and audio_format != 3 and audio_format != 0xFFFE and audio_format != 0xFFFC:
             raise Exception("Unknown audio format 0x%X in wav data" %
                             audio_format)
 
@@ -398,7 +410,21 @@ class HandleAudio:
 
     def __getAudioBuf__(self):
         if self.buf is None:
-            self.buf = array.array('h', self.audioData)
+            data = self.audioData
+            if self.format == 3:
+                data = numpy.frombuffer(data, dtype=f'<f{int(self.bit_depth / 8)}').reshape(-1, self.channel)
+                self.buf = self.float2pcm(data)
+                self.bit_depth = 16
+                self.block_align = int(self.bit_depth / 8) * self.channel
+            elif self.format == 1 and self.bit_depth == 24:
+                self.buf = self.pcm24to32(self.audioData, self.channel)
+                self.bit_depth = 32
+                self.block_align = int(self.bit_depth / 8) * self.channel
+            elif self.format == 1 and self.bit_depth == 16:
+                self.buf = numpy.frombuffer(data, dtype=f'<i2').reshape(-1, self.channel)
+            else:
+                raise Exception("just support audio format float32,float16,int32,int24,int16 in wav data"
+                                f"not support format:{self.format} {self.bit_depth}bit")
         return self.buf
 
     def __getClearValue__(self, useAmplitude):
@@ -457,3 +483,81 @@ class HandleAudio:
         headerBinary = dataBinary[:pos]
         data.close()
         return chunks, dataBinary[pos:(pos + dataBuf.size)], headerBinary
+
+    """Convert floating point signal with a range from -1 to 1 to PCM.
+    Any signal values outside the interval [-1.0, 1.0) are clipped.
+    No dithering is used.
+    Note that there are different possibilities for scaling floating
+    point numbers to PCM numbers, this function implements just one of
+    them.  For an overview of alternatives see
+    http://blog.bjornroche.com/2009/12/int-float-int-its-jungle-out-there.html
+    Parameters
+    ----------
+    sig : array_like
+        Input array, must have floating point type.
+    dtype : data type, optional
+        Desired (integer) data type.
+    Returns
+    -------
+    numpy.ndarray
+        Integer data, scaled and clipped to the range of the given
+        *dtype*.
+    See Also
+    --------
+    pcm2float, dtype
+    """
+
+    def float2pcm(self, sig, dtype='int16'):
+        sig_array = numpy.asarray(sig)
+        if sig_array.dtype.kind != 'f':
+            raise TypeError("'sig' must be a float array")
+        dtype = numpy.dtype(dtype)
+        if dtype.kind not in 'iu':
+            raise TypeError("'dtype' must be an integer type")
+
+        i = numpy.iinfo(dtype)
+        abs_max = 2 ** (i.bits - 1)
+        offset = i.min + abs_max
+        return (sig_array * abs_max + offset).clip(i.min, i.max).astype(dtype)
+
+    """Convert 24-bit PCM data to 32-bit.
+
+    Parameters
+    ----------
+    data : buffer
+        A buffer object where each group of 3 bytes represents one
+        little-endian 24-bit value.
+    channels : int, optional
+        Number of channels, by default 1.
+    normalize : bool, optional
+        If ``True`` (the default) the additional zero-byte is added as
+        least significant byte, effectively multiplying each value by
+        256, which leads to the maximum 24-bit value being mapped to the
+        maximum 32-bit value.  If ``False``, the zero-byte is added as
+        most significant byte and the values are not changed.
+
+    Returns
+    -------
+    numpy.ndarray
+        The content of *data* converted to an *int32* array, where each
+        value was padded with zero-bits in the least significant byte
+        (``normalize=True``) or in the most significant byte
+        (``normalize=False``).
+
+    """
+
+    def pcm24to32(self, data, channels=1, normalize=True):
+        if len(data) % 3 != 0:
+            raise ValueError('Size of data must be a multiple of 3 bytes')
+
+        out = numpy.zeros(len(data) // 3, dtype='<i4')
+        out.shape = -1, channels
+        temp = out.view('uint8').reshape(-1, 4)
+        if normalize:
+            # write to last 3 columns, leave LSB at zero
+            columns = slice(1, None)
+        else:
+            # write to first 3 columns, leave MSB at zero
+            columns = slice(None, -1)
+        temp[:, columns] = numpy.frombuffer(data, dtype='uint8').reshape(-1, 3)
+        return out

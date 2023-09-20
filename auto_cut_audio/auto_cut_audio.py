@@ -1,4 +1,4 @@
-from .HandleAudio import HandleAudio
+from HandleAudio import HandleAudio
 import os
 
 '''
@@ -75,3 +75,7 @@ def auto_cut_audio_without_empty_audio(audio_path, **kwargs):
 # 生成音频名称
 def create_cut_time(audio_path, count, start, end):
     return f'{os.path.basename(audio_path)}_{count}_{str(start)}_{str(end)}'
+
+if __name__ == '__main__':
+    data = auto_cut_audio_without_empty_audio("/Users/admin/Downloads/5_01.wav")
+    print(data)
