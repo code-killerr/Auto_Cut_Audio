@@ -14,7 +14,7 @@ from auto_cut_audio.__version__ import __version__
 setup(
     name="auto_cut_audio",
     version=__version__,
-    keywords=("pip3", "henry"),
+    keywords=["pip3", "AllenTu"],
     description="tools for auto cut wav audio",
     long_description="tools for wav audio,you can get audio info,auto cut audio,get audio base noise, delete empty "
                      "noise and so on",
@@ -27,5 +27,5 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     platforms="any",
-    install_requires=['numpy']
+    install_requires=['numpy>=1.21.0']
 )

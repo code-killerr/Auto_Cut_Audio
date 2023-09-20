@@ -1,3 +1,4 @@
+中文介绍[blog.ck-tu.top](http://www.ck-tu.top:7000/2021/04/28/autoCutAudio/)
 # Auto_Cut_Audio(wav for now)
 We always have a lot of wav audio to cut especially talking audio.
 
