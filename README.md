@@ -6,6 +6,12 @@ sometimes we need to cut them but we always cut off a word or a complete sentenc
 
 now~ you won't.
 
+## How can I install
+1. clone this project.
+2. install numpy `pip install numpy`
+3. open shell or terminal in this folder
+4. `pip install .` or `pip install -e .`
+
 ## what I can do with this
 
 ### 1. auto cut audio 🧠
